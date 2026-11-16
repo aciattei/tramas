@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grade de Pintura 41×41</title>
+<title>Grade de Pintura</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
@@ -22,11 +22,11 @@
     color: var(--ink);
   }
   .app {
-    max-width: 1100px;
+    max-width: 1500px;
     margin: 0 auto;
     padding: 20px 16px 40px;
     display: flex;
-    gap: 24px;
+    gap: 16px;
     align-items: flex-start;
     flex-wrap: wrap;
     justify-content: center;
@@ -39,11 +39,14 @@
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 12px;
-    padding: 16px;
-    width: 260px;
+    padding: 12px;
+    width: 190px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+    font-size: .85rem;
+    position: sticky;
+    top: 12px;
   }
   .panel h2 {
     font-size: .8rem;
@@ -55,16 +58,16 @@
   .swatches {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 6px;
+    gap: 4px;
   }
   .swatch {
     aspect-ratio: 1;
-    border-radius: 6px;
+    border-radius: 4px;
     border: 1px solid rgba(0,0,0,.15);
     cursor: pointer;
     padding: 0;
   }
-  .swatch.active { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .swatch.active { outline: 2px solid var(--ink); outline-offset: 1px; }
   .custom {
     display: flex;
     align-items: center;
@@ -73,7 +76,7 @@
     font-size: .9rem;
   }
   .custom input[type=color] {
-    width: 44px; height: 32px;
+    width: 34px; height: 26px;
     border: 1px solid var(--line);
     border-radius: 6px;
     padding: 2px;
@@ -126,21 +129,20 @@
     padding: 12px;
   }
   .layout {
-    --size: min(74vmin, 620px);
-    --cell: calc(var(--size) / 41);
+    --size: clamp(560px, calc(100vw - 290px), 1150px);
+    --n: 41;
+    --cell: calc(var(--size) / var(--n));
     display: grid;
-    grid-template-columns: calc(var(--cell) * 1.3) var(--size);
-    grid-template-rows: calc(var(--cell) * 1.3) var(--size);
+    grid-template-columns: calc(var(--cell) * 2) var(--size);
+    grid-template-rows: calc(var(--cell) * 1.6) var(--size);
   }
   .ruler {
     display: grid;
-    font-size: max(7px, calc(var(--cell) * 0.5));
+    font-size: max(10px, calc(var(--cell) * 0.78));
     font-variant-numeric: tabular-nums;
     color: var(--muted);
     user-select: none;
   }
-  .ruler.top { grid-template-columns: repeat(41, 1fr); }
-  .ruler.left { grid-template-rows: repeat(41, 1fr); }
   .ruler span {
     display: flex; align-items: center; justify-content: center;
     line-height: 1; overflow: visible; white-space: nowrap;
@@ -153,13 +155,24 @@
     width: var(--size);
     height: var(--size);
     display: grid;
-    grid-template-columns: repeat(41, 1fr);
-    grid-template-rows: repeat(41, 1fr);
     border-top: 1px solid #b9b6ae;
     border-left: 1px solid #b9b6ae;
     user-select: none;
     touch-action: manipulation;
   }
+  .sizes { display: flex; gap: 4px; }
+  .size-btn {
+    flex: 1;
+    font: inherit;
+    font-size: .82rem;
+    padding: 6px 0;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .size-btn:hover { background: #f1f0ec; }
+  .size-btn.active { background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600; }
   .cell {
     border-right: 1px solid #d9d6cf;
     border-bottom: 1px solid #d9d6cf;
@@ -186,8 +199,8 @@
   .modal .row { display: flex; gap: 8px; justify-content: flex-end; }
 
   @media (max-width: 700px) {
-    .panel { width: 100%; }
-    .layout { --size: 86vw; }
+    .panel { width: 100%; position: static; }
+    .layout { --size: 84vw; }
     .board-wrap { padding: 6px; }
   }
 </style>
@@ -195,20 +208,25 @@
 <body>
 <div class="app">
   <header>
-    <h1>Grade de Pintura 41×41</h1>
+    <h1 id="title">Grade de Pintura 41×41</h1>
     <p>Escolha uma cor e clique nos quadrados. Clicar num quadrado já preenchido apaga o preenchimento.</p>
   </header>
 
   <div class="board-wrap">
-    <div class="layout">
+    <div class="layout" id="layout">
       <div></div>
       <div class="ruler top" id="rulerTop" aria-hidden="true"></div>
       <div class="ruler left" id="rulerLeft" aria-hidden="true"></div>
-      <div class="board" id="board" aria-label="Grade de 41 por 41 quadrados"></div>
+      <div class="board" id="board"></div>
     </div>
   </div>
 
   <aside class="panel">
+    <div>
+      <h2>Grade</h2>
+      <div class="sizes" id="sizes"></div>
+    </div>
+
     <div>
       <h2>Cor</h2>
       <div class="swatches" id="swatches"></div>
@@ -229,7 +247,7 @@
       <h2>Salvar em PDF</h2>
       <div style="display:flex;flex-direction:column;gap:10px">
         <label class="field">Nome do arquivo
-          <input type="text" id="fname" value="grade-41x41">
+          <input type="text" id="fname" value="">
         </label>
         <label class="check"><input type="checkbox" id="showLines" checked> Mostrar linhas da grade</label>
         <label class="check"><input type="checkbox" id="showRulers" checked> Incluir réguas numeradas</label>
@@ -244,7 +262,7 @@
 
 <div class="modal-bg" id="confirmBg">
   <div class="modal" role="dialog" aria-modal="true">
-    <p>Apagar todos os quadrados preenchidos?</p>
+    <p>Apagar todos os quadrados preenchidos desta grade?</p>
     <div class="row">
       <button class="btn" id="cancelClear">Cancelar</button>
       <button class="btn primary" id="okClear">Apagar</button>
@@ -254,58 +272,132 @@
 
 <script>
 (function () {
-  const N = 41;
-  const STORE_KEY = "grade41x41-v1";
+  const SIZES = [33, 41, 42];
+  const STORE_PREFIX = "grade-pintura-v2-";
   const PALETTE = [
     "#000000", "#5f6368", "#c0392b", "#e67e22", "#f1c40f", "#27ae60",
     "#2f6f4f", "#16a085", "#2980b9", "#1f3a93", "#8e44ad", "#d35490",
     "#8b5a2b", "#f5cba7", "#a9dfbf", "#aed6f1", "#d7bde2", "#ffffff"
   ];
 
-  // estado: null = vazio, ou string com a cor "#rrggbb"
-  let cells = new Array(N * N).fill(null);
+  let N = 41;
+  let cells = [];          // null = vazio, ou "#rrggbb"
   let color = "#2f6f4f";
+  let els = [], topEls = [], leftEls = [];
 
+  const layout = document.getElementById("layout");
   const board = document.getElementById("board");
+  const rulerTop = document.getElementById("rulerTop");
+  const rulerLeft = document.getElementById("rulerLeft");
   const swatchBox = document.getElementById("swatches");
   const picker = document.getElementById("picker");
   const currentBox = document.getElementById("currentBox");
   const currentHex = document.getElementById("currentHex");
   const countEl = document.getElementById("count");
   const statusEl = document.getElementById("status");
-  const els = [];
+  const titleEl = document.getElementById("title");
+  const fnameEl = document.getElementById("fname");
+  const sizeBox = document.getElementById("sizes");
 
-  // ---------- grade ----------
-  const center = Math.floor(N / 2);
-  for (let i = 0; i < N * N; i++) {
-    const r = Math.floor(i / N), c = i % N;
-    const d = document.createElement("div");
-    d.className = "cell";
-    if ((c + 1) % 10 === 0 || c === center - 1 || c === center) d.classList.add("c10");
-    if ((r + 1) % 10 === 0 || r === center - 1 || r === center) d.classList.add("r10");
-    d.dataset.i = i;
-    board.appendChild(d);
-    els.push(d);
+  // ---------- linhas-guia ----------
+  // Retorna true se a borda DEPOIS da posição k (1..N) deve ser reforçada:
+  // a cada 10 quadrados e em volta do centro (quadrado central se N for ímpar,
+  // linha central se N for par).
+  function isGuide(k) {
+    if (k % 10 === 0) return true;
+    if (N % 2 === 1) { const m = (N + 1) / 2; return k === m - 1 || k === m; }
+    return k === N / 2;
+  }
+  // números em destaque na régua
+  function isMark(k) {
+    if (k === 1 || k % 5 === 0) return true;
+    if (N % 2 === 1) return k === (N + 1) / 2;
+    return k === N / 2 || k === N / 2 + 1;
   }
 
-  // ---------- réguas ----------
-  const rulerTop = document.getElementById("rulerTop");
-  const rulerLeft = document.getElementById("rulerLeft");
-  const topEls = [], leftEls = [];
-  for (let k = 1; k <= N; k++) {
-    const isMark = k % 5 === 0 || k === 1 || k === center + 1;
-    const a = document.createElement("span");
-    const b = document.createElement("span");
-    a.textContent = b.textContent = k;
-    if (isMark) { a.classList.add("mark"); b.classList.add("mark"); }
-    rulerTop.appendChild(a); rulerLeft.appendChild(b);
-    topEls.push(a); leftEls.push(b);
+  // ---------- armazenamento local (um desenho por tamanho) ----------
+  function save() {
+    try { localStorage.setItem(STORE_PREFIX + N, JSON.stringify(cells)); } catch (_) {}
+    try { localStorage.setItem(STORE_PREFIX + "settings", JSON.stringify({ N, color })); } catch (_) {}
   }
-  // destaca na régua a coluna e a linha sob o mouse
+  function load(n) {
+    try {
+      const c = JSON.parse(localStorage.getItem(STORE_PREFIX + n) || "null");
+      if (Array.isArray(c) && c.length === n * n) return c;
+    } catch (_) {}
+    return new Array(n * n).fill(null);
+  }
+
+  // ---------- montar a grade ----------
+  function build(n) {
+    N = n;
+    cells = load(N);
+    layout.style.setProperty("--n", N);
+    board.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+    board.style.gridTemplateRows = `repeat(${N}, 1fr)`;
+    rulerTop.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+    rulerLeft.style.gridTemplateRows = `repeat(${N}, 1fr)`;
+    board.setAttribute("aria-label", `Grade de ${N} por ${N} quadrados`);
+    titleEl.textContent = `Grade de Pintura ${N}×${N}`;
+    if (/^grade-\d+x\d+$/.test(fnameEl.value.trim()) || !fnameEl.value.trim()) {
+      fnameEl.value = `grade-${N}x${N}`;
+    }
+
+    board.innerHTML = ""; rulerTop.innerHTML = ""; rulerLeft.innerHTML = "";
+    els = []; topEls = []; leftEls = []; hlC = hlR = -1;
+
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < N * N; i++) {
+      const r = Math.floor(i / N), c = i % N;
+      const d = document.createElement("div");
+      d.className = "cell";
+      if (isGuide(c + 1)) d.classList.add("c10");
+      if (isGuide(r + 1)) d.classList.add("r10");
+      d.dataset.i = i;
+      d.style.background = cells[i] || "#fff";
+      frag.appendChild(d);
+      els.push(d);
+    }
+    board.appendChild(frag);
+
+    for (let k = 1; k <= N; k++) {
+      const a = document.createElement("span");
+      const b = document.createElement("span");
+      a.textContent = b.textContent = k;
+      if (isMark(k)) { a.classList.add("mark"); b.classList.add("mark"); }
+      rulerTop.appendChild(a); rulerLeft.appendChild(b);
+      topEls.push(a); leftEls.push(b);
+    }
+
+    sizeBox.querySelectorAll("button").forEach(b =>
+      b.classList.toggle("active", Number(b.dataset.n) === N));
+    afterChange();
+  }
+
+  // ---------- seletor de tamanho ----------
+  SIZES.forEach(n => {
+    const b = document.createElement("button");
+    b.className = "size-btn";
+    b.dataset.n = n;
+    b.textContent = `${n}×${n}`;
+    b.addEventListener("click", () => { if (n !== N) build(n); });
+    sizeBox.appendChild(b);
+  });
+
+  // ---------- clique e destaque ----------
+  board.addEventListener("click", (e) => {
+    const t = e.target.closest(".cell");
+    if (!t) return;
+    const i = Number(t.dataset.i);
+    cells[i] = cells[i] ? null : color;   // preenchido -> apaga; vazio -> pinta
+    els[i].style.background = cells[i] || "#fff";
+    afterChange();
+  });
+
   let hlC = -1, hlR = -1;
   function highlight(r, c) {
-    if (hlC >= 0) topEls[hlC].classList.remove("hl");
-    if (hlR >= 0) leftEls[hlR].classList.remove("hl");
+    if (hlC >= 0 && topEls[hlC]) topEls[hlC].classList.remove("hl");
+    if (hlR >= 0 && leftEls[hlR]) leftEls[hlR].classList.remove("hl");
     hlC = c; hlR = r;
     if (c >= 0) topEls[c].classList.add("hl");
     if (r >= 0) leftEls[r].classList.add("hl");
@@ -318,19 +410,6 @@
   });
   board.addEventListener("mouseleave", () => highlight(-1, -1));
 
-  function paint(i) {
-    els[i].style.background = cells[i] || "#fff";
-  }
-
-  board.addEventListener("click", (e) => {
-    const t = e.target.closest(".cell");
-    if (!t) return;
-    const i = Number(t.dataset.i);
-    cells[i] = cells[i] ? null : color;   // preenchido -> apaga; vazio -> pinta
-    paint(i);
-    afterChange();
-  });
-
   // ---------- cores ----------
   function setColor(hex) {
     color = hex.toLowerCase();
@@ -339,6 +418,7 @@
     picker.value = color;
     swatchBox.querySelectorAll(".swatch").forEach(s =>
       s.classList.toggle("active", s.dataset.c === color));
+    save();
   }
   PALETTE.forEach(hex => {
     const b = document.createElement("button");
@@ -352,22 +432,21 @@
   });
   picker.addEventListener("input", () => setColor(picker.value));
 
-  // ---------- contagem e armazenamento local ----------
   function afterChange() {
     const n = cells.filter(Boolean).length;
     countEl.textContent = n === 1 ? "1 quadrado preenchido" : n + " quadrados preenchidos";
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ cells, color })); } catch (_) {}
+    save();
   }
+
+  // ---------- início ----------
+  let startN = 41;
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
-    if (saved && Array.isArray(saved.cells) && saved.cells.length === N * N) {
-      cells = saved.cells;
-      if (saved.color) color = saved.color;
-    }
+    const s = JSON.parse(localStorage.getItem(STORE_PREFIX + "settings") || "null");
+    if (s && SIZES.includes(s.N)) startN = s.N;
+    if (s && s.color) color = s.color;
   } catch (_) {}
-  cells.forEach((_, i) => paint(i));
+  build(startN);
   setColor(color);
-  afterChange();
 
   // ---------- limpar tudo ----------
   const confirmBg = document.getElementById("confirmBg");
@@ -375,7 +454,7 @@
   document.getElementById("cancelClear").onclick = () => confirmBg.classList.remove("open");
   document.getElementById("okClear").onclick = () => {
     cells.fill(null);
-    cells.forEach((_, i) => paint(i));
+    els.forEach(e => e.style.background = "#fff");
     afterChange();
     confirmBg.classList.remove("open");
   };
@@ -391,27 +470,23 @@
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageW = 210, pageH = 297, margin = 15;
     const withRulers = document.getElementById("showRulers").checked;
-    const gutter = withRulers ? 7 : 0;        // espaço para as réguas
-    const side = pageW - margin * 2 - gutter; // lado da grade em mm
+    const gutter = withRulers ? 11 : 0;        // espaço para as réguas
+    const side = pageW - margin * 2 - gutter;  // lado da grade em mm
     const cell = side / N;
     const x0 = margin + gutter, y0 = (pageH - side) / 2 + gutter / 2;
 
     if (withRulers) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6);
+      doc.setFontSize(N <= 33 ? 10 : 9);
       for (let k = 1; k <= N; k++) {
-        const isMark = k % 5 === 0 || k === 1 || k === center + 1;
-        doc.setTextColor(isMark ? 30 : 110);
-        doc.setFont("helvetica", isMark ? "bold" : "normal");
+        const mk = isMark(k);
+        doc.setTextColor(mk ? 30 : 110);
+        doc.setFont("helvetica", mk ? "bold" : "normal");
         const mid = (k - 0.5) * cell;
-        // régua de cima
-        doc.text(String(k), x0 + mid, y0 - 1.3, { align: "center" });
-        // régua da esquerda
-        doc.text(String(k), x0 - 1.3, y0 + mid, { align: "right", baseline: "middle" });
+        doc.text(String(k), x0 + mid, y0 - 1.5, { align: "center" });
+        doc.text(String(k), x0 - 1.5, y0 + mid, { align: "right", baseline: "middle" });
       }
     }
 
-    // quadrados preenchidos
     for (let i = 0; i < N * N; i++) {
       if (!cells[i]) continue;
       const r = Math.floor(i / N), c = i % N;
@@ -423,7 +498,7 @@
 
     if (document.getElementById("showLines").checked) {
       for (let k = 0; k <= N; k++) {
-        const strong = k === 0 || k === N || k % 10 === 0 || k === center || k === center + 1;
+        const strong = k === 0 || k === N || isGuide(k);
         doc.setDrawColor(strong ? 150 : 205);
         doc.setLineWidth(strong ? 0.25 : 0.12);
         doc.line(x0 + k * cell, y0, x0 + k * cell, y0 + side);
@@ -446,8 +521,8 @@
       statusEl.textContent = "A biblioteca de PDF não carregou. Recarregue a página.";
       return;
     }
-    let name = (document.getElementById("fname").value || "grade-41x41").trim();
-    name = name.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]+/g, "-") || "grade-41x41";
+    let name = (fnameEl.value || `grade-${N}x${N}`).trim();
+    name = name.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]+/g, "-") || `grade-${N}x${N}`;
     // fora do Claude (ex.: GitHub Pages ou arquivo local): download normal do navegador
     if (!insideClaude) {
       const url = URL.createObjectURL(buildPdf());
@@ -465,8 +540,7 @@
     saveBtn.disabled = true;
     statusEl.textContent = "Gerando PDF…";
     try {
-      const blob = buildPdf();
-      await downloads.save({ filename: name + ".pdf", data: blob });
+      await downloads.save({ filename: name + ".pdf", data: buildPdf() });
       statusEl.textContent = "PDF salvo.";
     } catch (err) {
       const code = err && err.code;
@@ -478,14 +552,11 @@
     }
   });
 
-  // ativa o salvamento quando a plataforma disponibilizar
-  if (window.claude && typeof window.claude.use === "function") {
+  if (insideClaude) {
     window.claude.use("downloads").then(d => {
       downloads = d;
       if (!d) statusEl.textContent = "Salvar arquivos não está disponível nesta visualização.";
     }).catch(() => {});
-  } else {
-    statusEl.textContent = "";
   }
 })();
 </script>

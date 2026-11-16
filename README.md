@@ -1,11 +1,12 @@
-# Grade de Pintura 41×41
+# Grade de Pintura
 
-Aplicativo web simples para pintar uma grade de 41×41 quadrados e salvar o resultado em PDF.
+Aplicativo web simples para pintar uma grade quadriculada e salvar o resultado em PDF.
 
 ## Funcionalidades
 
-- Grade de 41×41 quadrados, com linhas-guia a cada 10 quadrados e no centro
-- Réguas numeradas (1 a 41) acima e à esquerda, com destaque da linha e coluna sob o mouse
+- Três tamanhos de grade: 33×33, 41×41 e 42×42 (cada tamanho guarda seu próprio desenho)
+- Linhas-guia a cada 10 quadrados e no centro
+- Réguas numeradas acima e à esquerda, com destaque da linha e coluna sob o mouse
 - Paleta com 18 cores e seletor de cor personalizada
 - Clique em um quadrado vazio para pintá-lo; clique em um quadrado preenchido para apagá-lo
 - Botão "Limpar tudo"
