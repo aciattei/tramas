@@ -130,11 +130,12 @@
   }
   .layout {
     --size: clamp(560px, calc(100vw - 290px), 1150px);
-    --n: 41;
-    --cell: calc(var(--size) / var(--n));
+    --c: 41;
+    --r: 41;
+    --cell: calc(var(--size) / var(--c));
     display: grid;
     grid-template-columns: calc(var(--cell) * 2) var(--size);
-    grid-template-rows: calc(var(--cell) * 1.6) var(--size);
+    grid-template-rows: calc(var(--cell) * 1.6) calc(var(--cell) * var(--r));
   }
   .ruler {
     display: grid;
@@ -153,14 +154,14 @@
   .ruler span.hl { background: #e8efe9; color: var(--accent); font-weight: 700; border-radius: 3px; }
   .board {
     width: var(--size);
-    height: var(--size);
+    height: calc(var(--cell) * var(--r));
     display: grid;
     border-top: 1px solid #b9b6ae;
     border-left: 1px solid #b9b6ae;
     user-select: none;
     touch-action: manipulation;
   }
-  .sizes { display: flex; gap: 4px; }
+  .sizes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
   .size-btn {
     flex: 1;
     font: inherit;
@@ -197,6 +198,10 @@
   }
   .modal p { margin: 0 0 16px; }
   .modal .row { display: flex; gap: 8px; justify-content: flex-end; }
+  .fname-row { display: flex; align-items: center; gap: 6px; }
+  .fname-row input { flex: 1; min-width: 0; }
+  .fname-row .ext { color: var(--muted); }
+  .form-error { color: #b42318; font-size: .82rem; min-height: 1.3em; margin: 6px 0 10px; }
 
   @media (max-width: 700px) {
     .panel { width: 100%; position: static; }
@@ -246,12 +251,9 @@
     <div>
       <h2>Salvar em PDF</h2>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <label class="field">Nome do arquivo
-          <input type="text" id="fname" value="">
-        </label>
         <label class="check"><input type="checkbox" id="showLines" checked> Mostrar linhas da grade</label>
         <label class="check"><input type="checkbox" id="showRulers" checked> Incluir réguas numeradas</label>
-        <button class="btn primary" id="savePdf">Salvar PDF</button>
+        <button class="btn primary" id="savePdf">Salvar PDF…</button>
         <div class="status" id="status"></div>
       </div>
     </div>
@@ -270,9 +272,30 @@
   </div>
 </div>
 
+<div class="modal-bg" id="saveBg">
+  <form class="modal" id="saveForm" role="dialog" aria-modal="true" aria-labelledby="saveTitle">
+    <p id="saveTitle" style="font-weight:600;margin-bottom:12px">Salvar em PDF</p>
+    <label class="field">Nome do arquivo
+      <span class="fname-row">
+        <input type="text" id="fname" autocomplete="off" spellcheck="false">
+        <span class="ext">.pdf</span>
+      </span>
+    </label>
+    <div class="form-error" id="fnameError"></div>
+    <div class="row">
+      <button type="button" class="btn" id="cancelSave">Cancelar</button>
+      <button type="submit" class="btn primary" id="okSave">Salvar</button>
+    </div>
+  </form>
+</div>
+
 <script>
 (function () {
-  const SIZES = [33, 41, 42];
+  // c = colunas (largura), r = linhas (altura)
+  const SIZES = [
+    { c: 33, r: 33 }, { c: 41, r: 41 }, { c: 42, r: 42 }, { c: 41, r: 80 }
+  ];
+  const keyOf = (s) => `${s.c}x${s.r}`;
   const STORE_PREFIX = "grade-pintura-v2-";
   const PALETTE = [
     "#000000", "#5f6368", "#c0392b", "#e67e22", "#f1c40f", "#27ae60",
@@ -280,7 +303,7 @@
     "#8b5a2b", "#f5cba7", "#a9dfbf", "#aed6f1", "#d7bde2", "#ffffff"
   ];
 
-  let N = 41;
+  let C = 41, R = 41;
   let cells = [];          // null = vazio, ou "#rrggbb"
   let color = "#2f6f4f";
   let els = [], topEls = [], leftEls = [];
@@ -303,56 +326,61 @@
   // Retorna true se a borda DEPOIS da posição k (1..N) deve ser reforçada:
   // a cada 10 quadrados e em volta do centro (quadrado central se N for ímpar,
   // linha central se N for par).
-  function isGuide(k) {
+  function isGuide(k, n) {
     if (k % 10 === 0) return true;
-    if (N % 2 === 1) { const m = (N + 1) / 2; return k === m - 1 || k === m; }
-    return k === N / 2;
+    if (n % 2 === 1) { const m = (n + 1) / 2; return k === m - 1 || k === m; }
+    return k === n / 2;
   }
   // números em destaque na régua
-  function isMark(k) {
+  function isMark(k, n) {
     if (k === 1 || k % 5 === 0) return true;
-    if (N % 2 === 1) return k === (N + 1) / 2;
-    return k === N / 2 || k === N / 2 + 1;
+    if (n % 2 === 1) return k === (n + 1) / 2;
+    return k === n / 2 || k === n / 2 + 1;
   }
 
   // ---------- armazenamento local (um desenho por tamanho) ----------
   function save() {
-    try { localStorage.setItem(STORE_PREFIX + N, JSON.stringify(cells)); } catch (_) {}
-    try { localStorage.setItem(STORE_PREFIX + "settings", JSON.stringify({ N, color })); } catch (_) {}
+    const key = `${C}x${R}`;
+    try { localStorage.setItem(STORE_PREFIX + key, JSON.stringify(cells)); } catch (_) {}
+    try { localStorage.setItem(STORE_PREFIX + "settings", JSON.stringify({ size: key, color })); } catch (_) {}
   }
-  function load(n) {
+  function load(c, r) {
     try {
-      const c = JSON.parse(localStorage.getItem(STORE_PREFIX + n) || "null");
-      if (Array.isArray(c) && c.length === n * n) return c;
+      // compatível com desenhos quadrados salvos na versão anterior (chave "41")
+      let raw = localStorage.getItem(STORE_PREFIX + `${c}x${r}`);
+      if (raw === null && c === r) raw = localStorage.getItem(STORE_PREFIX + c);
+      const arr = JSON.parse(raw || "null");
+      if (Array.isArray(arr) && arr.length === c * r) return arr;
     } catch (_) {}
-    return new Array(n * n).fill(null);
+    return new Array(c * r).fill(null);
   }
 
   // ---------- montar a grade ----------
-  function build(n) {
-    N = n;
-    cells = load(N);
-    layout.style.setProperty("--n", N);
-    board.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
-    board.style.gridTemplateRows = `repeat(${N}, 1fr)`;
-    rulerTop.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
-    rulerLeft.style.gridTemplateRows = `repeat(${N}, 1fr)`;
-    board.setAttribute("aria-label", `Grade de ${N} por ${N} quadrados`);
-    titleEl.textContent = `Grade de Pintura ${N}×${N}`;
+  function build(size) {
+    C = size.c; R = size.r;
+    cells = load(C, R);
+    layout.style.setProperty("--c", C);
+    layout.style.setProperty("--r", R);
+    board.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+    board.style.gridTemplateRows = `repeat(${R}, 1fr)`;
+    rulerTop.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+    rulerLeft.style.gridTemplateRows = `repeat(${R}, 1fr)`;
+    board.setAttribute("aria-label", `Grade de ${C} colunas por ${R} linhas`);
+    titleEl.textContent = `Grade de Pintura ${C}×${R}`;
     if (/^grade-\d+x\d+$/.test(fnameEl.value.trim()) || !fnameEl.value.trim()) {
-      fnameEl.value = `grade-${N}x${N}`;
+      fnameEl.value = `grade-${C}x${R}`;
     }
 
     board.innerHTML = ""; rulerTop.innerHTML = ""; rulerLeft.innerHTML = "";
     els = []; topEls = []; leftEls = []; hlC = hlR = -1;
 
     const frag = document.createDocumentFragment();
-    for (let i = 0; i < N * N; i++) {
-      const r = Math.floor(i / N), c = i % N;
+    for (let i = 0; i < C * R; i++) {
+      const r = Math.floor(i / C), c = i % C;
       const d = document.createElement("div");
       d.className = "cell";
-      if (isGuide(c + 1)) d.classList.add("c10");
-      if (isGuide(r + 1)) d.classList.add("r10");
+      if (isGuide(c + 1, C)) d.classList.add("c10");
+      if (isGuide(r + 1, R)) d.classList.add("r10");
       d.dataset.i = i;
       d.style.background = cells[i] || "#fff";
       frag.appendChild(d);
@@ -360,27 +388,31 @@
     }
     board.appendChild(frag);
 
-    for (let k = 1; k <= N; k++) {
+    for (let k = 1; k <= C; k++) {
       const a = document.createElement("span");
+      a.textContent = k;
+      if (isMark(k, C)) a.classList.add("mark");
+      rulerTop.appendChild(a); topEls.push(a);
+    }
+    for (let k = 1; k <= R; k++) {
       const b = document.createElement("span");
-      a.textContent = b.textContent = k;
-      if (isMark(k)) { a.classList.add("mark"); b.classList.add("mark"); }
-      rulerTop.appendChild(a); rulerLeft.appendChild(b);
-      topEls.push(a); leftEls.push(b);
+      b.textContent = k;
+      if (isMark(k, R)) b.classList.add("mark");
+      rulerLeft.appendChild(b); leftEls.push(b);
     }
 
     sizeBox.querySelectorAll("button").forEach(b =>
-      b.classList.toggle("active", Number(b.dataset.n) === N));
+      b.classList.toggle("active", b.dataset.k === `${C}x${R}`));
     afterChange();
   }
 
   // ---------- seletor de tamanho ----------
-  SIZES.forEach(n => {
+  SIZES.forEach(s => {
     const b = document.createElement("button");
     b.className = "size-btn";
-    b.dataset.n = n;
-    b.textContent = `${n}×${n}`;
-    b.addEventListener("click", () => { if (n !== N) build(n); });
+    b.dataset.k = keyOf(s);
+    b.textContent = `${s.c}×${s.r}`;
+    b.addEventListener("click", () => { if (s.c !== C || s.r !== R) build(s); });
     sizeBox.appendChild(b);
   });
 
@@ -406,7 +438,7 @@
     const t = e.target.closest(".cell");
     if (!t) return;
     const i = Number(t.dataset.i);
-    highlight(Math.floor(i / N), i % N);
+    highlight(Math.floor(i / C), i % C);
   });
   board.addEventListener("mouseleave", () => highlight(-1, -1));
 
@@ -439,13 +471,15 @@
   }
 
   // ---------- início ----------
-  let startN = 41;
+  let start = SIZES[1];
   try {
     const s = JSON.parse(localStorage.getItem(STORE_PREFIX + "settings") || "null");
-    if (s && SIZES.includes(s.N)) startN = s.N;
+    const key = s && (s.size || (s.N ? `${s.N}x${s.N}` : null));
+    const found = SIZES.find(z => keyOf(z) === key);
+    if (found) start = found;
     if (s && s.color) color = s.color;
   } catch (_) {}
-  build(startN);
+  build(start);
   setColor(color);
 
   // ---------- limpar tudo ----------
@@ -471,25 +505,27 @@
     const pageW = 210, pageH = 297, margin = 15;
     const withRulers = document.getElementById("showRulers").checked;
     const gutter = withRulers ? 11 : 0;        // espaço para as réguas
-    const side = pageW - margin * 2 - gutter;  // lado da grade em mm
-    const cell = side / N;
-    const x0 = margin + gutter, y0 = (pageH - side) / 2 + gutter / 2;
+    // maior quadrado que faz a grade inteira caber na folha A4
+    const cell = Math.min((pageW - margin * 2 - gutter) / C, (pageH - margin * 2 - gutter) / R);
+    const W = C * cell, H = R * cell;
+    const x0 = (pageW - (W + gutter)) / 2 + gutter;
+    const y0 = (pageH - (H + gutter)) / 2 + gutter;
 
     if (withRulers) {
-      doc.setFontSize(N <= 33 ? 10 : 9);
-      for (let k = 1; k <= N; k++) {
-        const mk = isMark(k);
+      doc.setFontSize(Math.min(10, cell * 2.25));
+      const label = (k, n, x, y, opts) => {
+        const mk = isMark(k, n);
         doc.setTextColor(mk ? 30 : 110);
         doc.setFont("helvetica", mk ? "bold" : "normal");
-        const mid = (k - 0.5) * cell;
-        doc.text(String(k), x0 + mid, y0 - 1.5, { align: "center" });
-        doc.text(String(k), x0 - 1.5, y0 + mid, { align: "right", baseline: "middle" });
-      }
+        doc.text(String(k), x, y, opts);
+      };
+      for (let k = 1; k <= C; k++) label(k, C, x0 + (k - 0.5) * cell, y0 - 1.5, { align: "center" });
+      for (let k = 1; k <= R; k++) label(k, R, x0 - 1.5, y0 + (k - 0.5) * cell, { align: "right", baseline: "middle" });
     }
 
-    for (let i = 0; i < N * N; i++) {
+    for (let i = 0; i < C * R; i++) {
       if (!cells[i]) continue;
-      const r = Math.floor(i / N), c = i % N;
+      const r = Math.floor(i / C), c = i % C;
       const [R, G, B] = hexToRgb(cells[i]);
       doc.setFillColor(R, G, B);
       // pequena sobreposição evita frestas brancas entre quadrados vizinhos
@@ -497,17 +533,22 @@
     }
 
     if (document.getElementById("showLines").checked) {
-      for (let k = 0; k <= N; k++) {
-        const strong = k === 0 || k === N || isGuide(k);
+      const style = (strong) => {
         doc.setDrawColor(strong ? 150 : 205);
         doc.setLineWidth(strong ? 0.25 : 0.12);
-        doc.line(x0 + k * cell, y0, x0 + k * cell, y0 + side);
-        doc.line(x0, y0 + k * cell, x0 + side, y0 + k * cell);
+      };
+      for (let k = 0; k <= C; k++) {
+        style(k === 0 || k === C || isGuide(k, C));
+        doc.line(x0 + k * cell, y0, x0 + k * cell, y0 + H);
+      }
+      for (let k = 0; k <= R; k++) {
+        style(k === 0 || k === R || isGuide(k, R));
+        doc.line(x0, y0 + k * cell, x0 + W, y0 + k * cell);
       }
     } else {
       doc.setDrawColor(150);
       doc.setLineWidth(0.25);
-      doc.rect(x0, y0, side, side, "S");
+      doc.rect(x0, y0, W, H, "S");
     }
     return doc.output("blob");
   }
@@ -516,13 +557,45 @@
   let downloads = null;
   const insideClaude = !!(window.claude && typeof window.claude.use === "function");
 
-  saveBtn.addEventListener("click", async () => {
+  const saveBg = document.getElementById("saveBg");
+  const saveForm = document.getElementById("saveForm");
+  const fnameError = document.getElementById("fnameError");
+
+  function closeSaveDialog() { saveBg.classList.remove("open"); }
+
+  // botão "Salvar PDF…": abre a janela pedindo o nome do arquivo
+  saveBtn.addEventListener("click", () => {
     if (!window.jspdf) {
       statusEl.textContent = "A biblioteca de PDF não carregou. Recarregue a página.";
       return;
     }
-    let name = (fnameEl.value || `grade-${N}x${N}`).trim();
-    name = name.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]+/g, "-") || `grade-${N}x${N}`;
+    fnameError.textContent = "";
+    saveBg.classList.add("open");
+    fnameEl.focus();
+    fnameEl.select();
+  });
+  document.getElementById("cancelSave").addEventListener("click", closeSaveDialog);
+  saveBg.addEventListener("click", (e) => { if (e.target === saveBg) closeSaveDialog(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closeSaveDialog(); confirmBg.classList.remove("open"); }
+  });
+  fnameEl.addEventListener("input", () => { fnameError.textContent = ""; });
+
+  // confirmar na janela (botão Salvar ou tecla Enter)
+  saveForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    let name = fnameEl.value.trim().replace(/\.pdf$/i, "").trim();
+    if (!name) {
+      fnameError.textContent = "Digite um nome para o arquivo.";
+      fnameEl.focus();
+      return;
+    }
+    if (/[\\/:*?"<>|]/.test(name)) {
+      fnameError.textContent = 'O nome não pode conter \\ / : * ? " < > |';
+      fnameEl.focus();
+      return;
+    }
+    closeSaveDialog();
     // fora do Claude (ex.: GitHub Pages ou arquivo local): download normal do navegador
     if (!insideClaude) {
       const url = URL.createObjectURL(buildPdf());
